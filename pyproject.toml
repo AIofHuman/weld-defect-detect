@@ -1,0 +1,31 @@
+[tool.ruff]
+line-length = 80
+
+[tool.ruff.format]
+quote-style = "single"
+
+[project]
+name = "ai_weld_bot"
+version = "0.1.0"
+description = "REST API and telegram bot to weld defect detect"
+authors = [
+    {name = "Demkov Boris", email = "demkov.boris@yandex.ru"},
+]
+dependencies = [
+    "pandas>=2.2.1",
+    "numpy>=1.26.4",
+    "scikit-learn>=1.4.1.post1",
+]
+requires-python = "==3.11.*"
+readme = "README.md"
+license = {text = "MIT"}
+
+
+[tool.pdm]
+distribution = false
+
+[tool.pdm.dev-dependencies]
+dev = [
+    "ruff>=0.3.5",
+    "pre-commit>=3.7.0",
+]
