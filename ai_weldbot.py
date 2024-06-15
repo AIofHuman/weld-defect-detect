@@ -1,12 +1,11 @@
 import logging
 import os
-import shutil
 from pathlib import Path
 
-import torch
 from dotenv import load_dotenv
 from telegram import ReplyKeyboardMarkup
 from telegram.ext import CommandHandler, Filters, MessageHandler, Updater
+from ultralytics import YOLO
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -19,23 +18,28 @@ CHAT_ID = os.getenv('CHAT_ID')
 DEBUG = os.getenv('DEBUG', default='False') == 'True'
 
 
+def delete_files_in_directory(directory_path):
+    try:
+        files = os.listdir(directory_path)
+        for file in files:
+            file_path = os.path.join(directory_path, file)
+            if os.path.isfile(file_path):
+                os.remove(file_path)
+        print('All temp files deleted successfully.')
+    except OSError:
+        print('Error occurred while deleting temp files.')
+
+
 def get_image_predict(photo_weld):
     # clean temp dir
-    shutil.rmtree('./tmp')
+    delete_files_in_directory('./tmp/')
 
-    # Model
-    model = torch.hub.load(
-        './yolov5/',
-        'custom',
-        source='local',
-        path='/models/yolov5s.pt',
-        force_reload=True,
-    )
-    # model = torch.hub.load("ultralytics/yolov5", "yolov5s")
+    model = YOLO('yolov8n.pt')
 
-    results = model(photo_weld, size=640)
-    results.save(save_dir='./tmp')
-    return f'./tmp/{results.files[0]}'
+    # results = model(photo_weld, size=640)
+    results = model(photo_weld)
+    results[0].save(filename='./tmp/result.jpg')
+    return './tmp/result.jpg'
 
 
 def get_predict(update, context, photo=True):
