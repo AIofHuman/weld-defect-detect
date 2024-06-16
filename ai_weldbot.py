@@ -1,5 +1,6 @@
 import logging
 import os
+import tempfile
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -13,9 +14,8 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 BOT_TOKEN = os.getenv('BOT_TOKEN')
-CHAT_ID = os.getenv('CHAT_ID')
-
-DEBUG = os.getenv('DEBUG', default='False') == 'True'
+TEMP_DIR = './tmp/'
+MODEL_NAME = 'yolov8_n_200epoch.pt'
 
 
 def delete_files_in_directory(directory_path):
@@ -32,14 +32,18 @@ def delete_files_in_directory(directory_path):
 
 def get_image_predict(photo_weld):
     # clean temp dir
-    delete_files_in_directory('./tmp/')
+    delete_files_in_directory(TEMP_DIR)
 
-    model = YOLO('yolov8n.pt')
+    model = YOLO(MODEL_NAME)
 
-    # results = model(photo_weld, size=640)
     results = model(photo_weld)
-    results[0].save(filename='./tmp/result.jpg')
-    return './tmp/result.jpg'
+
+    tmp_file_name = (
+        os.path.basename(tempfile.TemporaryFile(dir=TEMP_DIR).name) + '.jpg'
+    )
+    tmp_file = os.path.join(TEMP_DIR, tmp_file_name)
+    results[0].save(filename=tmp_file)
+    return tmp_file
 
 
 def get_predict(update, context, photo=True):
@@ -51,8 +55,10 @@ def get_predict(update, context, photo=True):
             photo_weld = context.bot.get_file(update.message.document)
 
         inference_file = open(get_image_predict(photo_weld.file_path), 'rb')
-
-        context.bot.send_photo(chat.id, inference_file, 'Мой вердикт')
+        button = ReplyKeyboardMarkup([['Не согласны?']], resize_keyboard=True)
+        context.bot.send_photo(
+            chat.id, inference_file, 'Мой вердикт', reply_markup=button
+        )
         inference_file.close()
     except Exception as error:
         context.bot.send_message(
@@ -77,12 +83,10 @@ def only_photo(update, context):
 def feedback(update, context):
     chat = update.effective_chat
     name = update.message.chat.first_name
-    button = ReplyKeyboardMarkup([['/feedback']], resize_keyboard=True)
 
     context.bot.send_message(
         chat_id=chat.id,
         text=f'Спасибо! Учту твое мнение, {name}.',
-        reply_markup=button,
     )
 
 

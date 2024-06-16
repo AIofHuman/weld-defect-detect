@@ -1,6 +1,12 @@
 # all secrets
 creditinals.txt
 
+.vscode/
+.data/
+.runs/
+.tmp/
+.yolov5/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

@@ -1,0 +1,11 @@
+path: /home/jupyter/datasphere/project/datasets/rosatom/ # dataset root dir
+train: images/train # train images (relative to 'path')
+val: images/val # val images (relative to 'path')
+
+# Classes
+names:
+  0: брызги-прожоги
+  1: целостность
+  2: геометрия
+  3: постобработа
+  4: невыполнение
