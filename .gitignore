@@ -6,6 +6,7 @@ creditinals.txt
 .runs/
 .tmp/
 .yolov5/
+.logs/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

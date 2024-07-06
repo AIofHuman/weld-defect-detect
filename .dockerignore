@@ -1,0 +1,13 @@
+.git
+creditinals.txt
+
+.vscode/
+data/
+logs/
+runs/
+yolov5/
+venv/
+
+.pre-commit-config.yaml
+
+YOLOv8_train.ipynb
