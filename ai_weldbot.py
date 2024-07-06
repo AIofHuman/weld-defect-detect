@@ -43,12 +43,9 @@ def setup_logger(logger, file_name):
 def delete_temp_dir(directory_path):
     try:
         for root, dirs, files in os.walk(directory_path):
-            for file in files:
-                file_path = os.path.join(root, file)
-                os.remove(file_path)
-        for root, dirs, files in os.walk(directory_path):
             for dir in dirs:
                 dir_path = os.path.join(root, dir)
+                delete_files_in_directory(dir_path)
                 os.rmdir(dir_path)
 
         print("Temp directory deleted successfully.")
@@ -63,7 +60,6 @@ def delete_files_in_directory(directory_path):
             if os.path.isfile(file_path):
                 os.remove(file_path)
 
-        print('All temp files deleted successfully.')
     except OSError as error:
         logger.error(
             f'Raise error on temp files delete: {error}'
