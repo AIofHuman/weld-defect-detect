@@ -7,8 +7,15 @@ from pathlib import Path
 
 import pandas as pd
 from dotenv import load_dotenv
-from telegram import ReplyKeyboardMarkup
-from telegram.ext import CommandHandler, Filters, MessageHandler, Updater
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.chataction import ChatAction
+from telegram.ext import (
+    CallbackQueryHandler,
+    CommandHandler,
+    Filters,
+    MessageHandler,
+    Updater,
+)
 from ultralytics import YOLO
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -21,7 +28,7 @@ BOT_TOKEN = os.getenv('BOT_TOKEN')
 TEMP_DIR = 'tmp'
 MODEL_NAME = './yolov8m_200epoch_rus_cls_name.pt'
 USERS = pd.DataFrame(
-    columns=['start_period', 'count_photos', 'tmp_dir']
+    columns=['start_period', 'count_photos', 'tmp_dir', 'waiting_feedback']
 )
 PERIOD_LIMIT_MINUTES = 10
 COUNT_PHOTOS_LIMIT = 3
@@ -40,6 +47,7 @@ def setup_logger(logger, file_name):
     )
     logger.addHandler(handler)
 
+
 def delete_temp_dir(directory_path):
     try:
         for root, dirs, files in os.walk(directory_path):
@@ -48,9 +56,10 @@ def delete_temp_dir(directory_path):
                 delete_files_in_directory(dir_path)
                 os.rmdir(dir_path)
 
-        print("Temp directory deleted successfully.")
+        print('Temp directory deleted successfully.')
     except OSError:
-        print("Error occurred while deleting temp directory.")
+        print('Error occurred while deleting temp directory.')
+
 
 def delete_files_in_directory(directory_path):
     try:
@@ -61,9 +70,7 @@ def delete_files_in_directory(directory_path):
                 os.remove(file_path)
 
     except OSError as error:
-        logger.error(
-            f'Raise error on temp files delete: {error}'
-        )
+        logger.error(f'Raise error on temp files delete: {error}')
         print('Error occurred while deleting temp files.')
 
 
@@ -97,22 +104,31 @@ def get_image_predict(photo_weld, tmp_dir):
 def get_user_info(chat_id):
     now = datetime.now()
     if chat_id in USERS.index:
-        USERS.at[chat_id, 'count_photos'] = USERS.loc[chat_id, 'count_photos'] + 1
+        USERS.at[chat_id, 'count_photos'] = (
+            USERS.loc[chat_id, 'count_photos'] + 1
+        )
     else:
         tempfile.tempdir = os.path.join(BASE_DIR, TEMP_DIR)
         temp_dir = tempfile.mkdtemp()
-        USERS.loc[chat_id] = [now, 1, temp_dir]
+        USERS.loc[chat_id] = [now, 1, temp_dir, False]
 
     user_data = USERS.loc[chat_id].to_dict()
     user_data['access_allowed'] = True
     if (
-        (now - user_data['start_period']).total_seconds() / 60
-        <= PERIOD_LIMIT_MINUTES
-        and user_data['count_photos'] > COUNT_PHOTOS_LIMIT
-    ):
+        now - user_data['start_period']
+    ).total_seconds() / 60 <= PERIOD_LIMIT_MINUTES and user_data[
+        'count_photos'
+    ] > COUNT_PHOTOS_LIMIT:
         user_data['access_allowed'] = False
-    elif (now - user_data['start_period']).total_seconds() / 60 > PERIOD_LIMIT_MINUTES:
-        USERS.loc[chat_id] = [now, 1, USERS.loc[chat_id]['tmp_dir']]
+    elif (
+        now - user_data['start_period']
+    ).total_seconds() / 60 > PERIOD_LIMIT_MINUTES:
+        USERS.loc[chat_id] = [
+            now,
+            1,
+            USERS.loc[chat_id, 'tmp_dir'],
+            USERS.loc[chat_id, 'waiting_feedback'],
+        ]
 
     return user_data
 
@@ -120,7 +136,10 @@ def get_user_info(chat_id):
 def get_predict(update, context, photo=True):
     chat = update.effective_chat
     name = update.message.chat.first_name
+    context.bot.send_chat_action(chat_id=chat.id, action=ChatAction.TYPING)
     user_data = get_user_info(chat.id)
+    USERS.loc[chat.id, 'waiting_feedback'] = False
+
     if not user_data['access_allowed']:
         logger.info(f'User {name} chat_id={chat.id} reached the limit photos.')
         context.bot.send_message(
@@ -148,9 +167,15 @@ def get_predict(update, context, photo=True):
                 'Обнаружены следующие недостатки:\n'
                 + labels.value_counts().to_string()
             )
-        button = ReplyKeyboardMarkup([['Не согласны?']], resize_keyboard=True)
+
         context.bot.send_photo(
-            chat.id, inference_file, message, reply_markup=button
+            chat.id,
+            inference_file,
+            message,
+        )
+        update.message.reply_text(
+            text='Если есть замечания по диагностике жми на кнопку',
+            reply_markup=get_buttons(),
         )
         inference_file.close()
     except Exception as error:
@@ -163,26 +188,71 @@ def get_predict(update, context, photo=True):
         )
 
 
-def only_photo(update, context):
+def save_feedback():
+    print('Saving feedback')
+    pass
+
+
+def text_message(update, context):
     if update.message.text != None and len(update.message.text) > 0:
         chat = update.effective_chat
         name = update.message.chat.first_name
-        logger.info(f'User {name} chat_id={chat.id} upload not photo.')
-        context.bot.send_message(
-            chat_id=chat.id,
-            text=f'Ожидаю только фото сварного шва для детекции дефектов! Большего, я пока не могу, {name}!',
-        )
+        if USERS.loc[chat.id, 'waiting_feedback']:
+            save_feedback()
+            logger.info(f'User {name} chat_id={chat.id} save feedback.')
+            context.bot.send_message(
+                chat_id=chat.id,
+                text=f'Спасибо, {name}!',
+            )
+            USERS.loc[chat.id, 'waiting_feedback'] = False
+        else:
+            logger.info(f'User {name} chat_id={chat.id} upload not photo.')
+            context.bot.send_message(
+                chat_id=chat.id,
+                text=f'Ожидаю только фото сварного шва для детекции дефектов! Большего, я пока не могу, {name}!',
+            )
     elif update.message.document != None:
         get_predict(update, context, photo=False)
 
 
 def feedback(update, context):
     chat = update.effective_chat
-    name = update.message.chat.first_name
 
+    USERS.loc[chat.id, 'waiting_feedback'] = True
     context.bot.send_message(
         chat_id=chat.id,
-        text=f'Спасибо! Учту твое мнение, {name}.',
+        text='Прошу, как можно подробнее описать замечания к диагностике\n',
+        # text=f'Спасибо! Учтем Ваши замечания и станем лучше!',
+    )
+
+
+def get_buttons():
+    keyboard = [
+        [
+            InlineKeyboardButton(
+                'Обратная связь по диагностике', callback_data='1'
+            )
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard, resize_keyboard=True)
+    return reply_markup
+
+
+def button(update, context):
+    """Parses the CallbackQuery and updates the message text."""
+    query = update.callback_query
+    if query.data == '1':
+        feedback(update, context)
+    else:
+        print('Something unknown get')
+
+
+def help(update, context):
+    chat = update.effective_chat
+    USERS.loc[chat.id, 'waiting_feedback'] = False
+    context.bot.send_message(
+        chat_id=chat.id,
+        text='Ожидаю, либо фото сварного шва, либо комментарий к проведенной диагностике',
     )
 
 
@@ -191,7 +261,7 @@ def wake_up(update, context):
 
     context.bot.send_message(
         chat_id=chat.id,
-        text='Ожидаю фото сварочного шва',
+        text='Приветствую Вас! Ожидаю фото сварочного шва!',
     )
 
 
@@ -202,8 +272,9 @@ def main():
     updater = Updater(token=BOT_TOKEN)
     updater.dispatcher.add_handler(MessageHandler(Filters.photo, get_predict))
     updater.dispatcher.add_handler(CommandHandler('start', wake_up))
-    updater.dispatcher.add_handler(CommandHandler('feedback', feedback))
-    updater.dispatcher.add_handler(MessageHandler(~Filters.photo, only_photo))
+    updater.dispatcher.add_handler(CommandHandler('help', help))
+    updater.dispatcher.add_handler(CallbackQueryHandler(button))
+    updater.dispatcher.add_handler(MessageHandler(~Filters.photo, text_message))
 
     updater.start_polling()
     updater.idle()
