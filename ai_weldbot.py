@@ -36,6 +36,7 @@ COUNT_PHOTOS_LIMIT = 10
 
 
 def setup_logger(logger, file_name):
+    os.mkdir(os.path.join(BASE_DIR, 'logs'))
     format_string = '%(asctime)s-%(levelname)s:%(message)s'
     logging.basicConfig(
         format=format_string,
