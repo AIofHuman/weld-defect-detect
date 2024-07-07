@@ -3,6 +3,7 @@ creditinals.txt
 
 .vscode/
 .data/
+.users_data/
 .runs/
 .tmp/
 .yolov5/
