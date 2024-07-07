@@ -26,25 +26,31 @@ logger = logging.getLogger(__name__)
 
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 TEMP_DIR = 'tmp'
+USERS_DATA = 'users_data'
 MODEL_NAME = './yolov8m_200epoch_rus_cls_name.pt'
 USERS = pd.DataFrame(
     columns=['start_period', 'count_photos', 'tmp_dir', 'waiting_feedback']
 )
 PERIOD_LIMIT_MINUTES = 10
-COUNT_PHOTOS_LIMIT = 3
+COUNT_PHOTOS_LIMIT = 10
 
 
 def setup_logger(logger, file_name):
+    format_string = '%(asctime)s-%(levelname)s:%(message)s'
     logging.basicConfig(
-        format='%(levelname)s:%(message)s',
+        format=format_string,
+        datefmt='%Y/%m/%d/ %H:%M:%S',
         level=logging.INFO,
     )
+    formatter = logging.Formatter(format_string)
+
     handler = logging.handlers.RotatingFileHandler(
         filename=file_name,
         encoding='utf-8',
         maxBytes=1024 * 1024 * 10,
         backupCount=5,
     )
+    handler.setFormatter(formatter)
     logger.addHandler(handler)
 
 
@@ -188,9 +194,29 @@ def get_predict(update, context, photo=True):
         )
 
 
-def save_feedback():
+def save_feedback(chat_id, text_message, tmp_dir):
     print('Saving feedback')
-    pass
+    # move image file to user_data\{chat_id} directory
+
+    txt_created = False
+    files = os.listdir(tmp_dir)
+    for file in files:
+        if file.endswith('.jpg'):
+            file_path_source = os.path.join(tmp_dir, file)
+            path_users_data = os.path.join(BASE_DIR, USERS_DATA)
+            path_users_data = os.path.join(path_users_data, str(chat_id))
+            file_path_destination = os.path.join(path_users_data, file)
+            os.makedirs(os.path.dirname(file_path_destination), exist_ok=True)
+            if os.path.isfile(file_path_source):
+                os.rename(file_path_source, file_path_destination)
+                # save text description as same file with .txt extension
+                txt_file_name = (
+                    os.path.splitext(file_path_destination)[0] + '.txt'
+                )
+                if not txt_created:
+                    with open(txt_file_name, 'w', encoding='utf-8') as file:
+                        file.write(text_message)
+                    txt_created = True
 
 
 def text_message(update, context):
@@ -198,7 +224,9 @@ def text_message(update, context):
         chat = update.effective_chat
         name = update.message.chat.first_name
         if USERS.loc[chat.id, 'waiting_feedback']:
-            save_feedback()
+            save_feedback(
+                chat.id, update.message.text, USERS.loc[chat.id, 'tmp_dir']
+            )
             logger.info(f'User {name} chat_id={chat.id} save feedback.')
             context.bot.send_message(
                 chat_id=chat.id,
@@ -261,12 +289,14 @@ def wake_up(update, context):
 
     context.bot.send_message(
         chat_id=chat.id,
-        text='Приветствую Вас! Ожидаю фото сварочного шва!',
+        text='Приветствую Вас! Ожидаю фото сварного шва!',
     )
 
 
 def main():
-    setup_logger(logger, file_name='logs/ai_weldbot.log')
+    setup_logger(
+        logger, file_name=os.path.join(BASE_DIR, 'logs', 'ai_weldbot.log')
+    )
     delete_temp_dir(os.path.join(BASE_DIR, TEMP_DIR))
 
     updater = Updater(token=BOT_TOKEN)
