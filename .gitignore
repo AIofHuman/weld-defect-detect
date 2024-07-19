@@ -2,12 +2,12 @@
 creditinals.txt
 
 .vscode/
-.data/
-.users_data/
-.runs/
-.tmp/
-.yolov5/
-.logs/
+data/
+users_data/
+runs/
+tmp/
+yolov5/
+logs/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
